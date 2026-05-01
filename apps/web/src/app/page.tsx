@@ -1,6 +1,3 @@
-// Replace OWNER/REPO with your GitHub owner/repo before publishing.
-// The /releases/latest/download/<asset> redirect always points at the most
-// recent release, so the button never goes stale after each version bump.
 const GH_OWNER = "archiekerr26";
 const GH_REPO = "test-mac-app";
 const DMG_NAME = "FocusPad.dmg";
@@ -22,16 +19,64 @@ const features = [
   },
 ];
 
-export default function Page() {
+type ReleaseMeta = {
+  version: string | null;
+  sizeMB: string | null;
+};
+
+async function fetchLatestRelease(): Promise<ReleaseMeta> {
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/releases/latest`,
+      {
+        headers: { Accept: "application/vnd.github+json" },
+        // Re-fetch every 5 minutes so a new release shows up without redeploying.
+        next: { revalidate: 300 },
+      }
+    );
+    if (!res.ok) return { version: null, sizeMB: null };
+    const data = (await res.json()) as {
+      tag_name?: string;
+      assets?: { name: string; size: number }[];
+    };
+    const dmg = data.assets?.find((a) => a.name === DMG_NAME);
+    return {
+      version: data.tag_name ?? null,
+      sizeMB: dmg ? (dmg.size / 1024 / 1024).toFixed(0) : null,
+    };
+  } catch {
+    return { version: null, sizeMB: null };
+  }
+}
+
+function AppleLogo() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden fill="currentColor">
+      <path d="M16.365 1.43c0 1.14-.466 2.227-1.226 3.014-.81.84-2.124 1.493-3.21 1.4-.13-1.13.43-2.296 1.18-3.066.84-.86 2.27-1.488 3.256-1.348zM20.5 17.276c-.553 1.27-.82 1.83-1.524 2.95-.99 1.563-2.39 3.51-4.117 3.527-1.535.014-1.93-.99-4.013-.978-2.084.014-2.518 1-4.054.978-1.728-.018-3.052-1.78-4.043-3.343C.04 15.27-.43 9.92 1.4 7.073c1.295-2.022 3.34-3.205 5.262-3.205 1.96 0 3.193 1.07 4.812 1.07 1.572 0 2.527-1.07 4.793-1.07 1.715 0 3.534.93 4.83 2.534-4.245 2.32-3.555 8.36.402 10.874z" />
+    </svg>
+  );
+}
+
+export default async function Page() {
+  const release = await fetchLatestRelease();
+
+  const subline = [
+    "Apple Silicon",
+    release.version,
+    release.sizeMB ? `${release.sizeMB} MB` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <main className="mx-auto max-w-5xl px-6 py-20">
       <section className="text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/60 px-3 py-1 text-xs font-medium text-neutral-700 backdrop-blur">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          v1.0.0 · macOS
+          {release.version ?? "v1.0.0"} · macOS
         </div>
         <h1 className="mt-6 text-5xl font-semibold tracking-tight md:text-7xl">
-          A tiny focus timer
+          A luh calm tiny focus timer
           <br />
           <span className="text-neutral-500">that lives in your menu bar.</span>
         </h1>
@@ -43,11 +88,13 @@ export default function Page() {
         <div className="mt-10 flex flex-col items-center gap-3">
           <a
             href={DOWNLOAD_URL}
-            className="group inline-flex items-center gap-3 rounded-2xl bg-black px-7 py-4 text-base font-medium text-white shadow-lg shadow-black/10 transition hover:translate-y-[-1px] hover:shadow-xl"
+            className="group inline-flex items-center gap-3 rounded-2xl bg-black px-6 py-3.5 text-left text-white shadow-lg shadow-black/10 transition hover:translate-y-[-1px] hover:shadow-xl"
           >
-            <span aria-hidden></span>
-            Download for Mac
-            <span className="rounded-md bg-white/15 px-2 py-0.5 text-xs">.dmg</span>
+            <AppleLogo />
+            <span className="flex flex-col leading-tight">
+              <span className="text-base font-semibold">Download for Mac</span>
+              <span className="text-xs font-normal text-neutral-400">{subline}</span>
+            </span>
           </a>
           <a
             href={RELEASES_URL}
@@ -68,28 +115,6 @@ export default function Page() {
             <p className="mt-2 text-sm leading-relaxed text-neutral-600">{f.body}</p>
           </div>
         ))}
-      </section>
-
-      <section className="mt-24 rounded-3xl border border-amber-200 bg-amber-50 p-6 text-sm leading-relaxed text-amber-900">
-        <h2 className="text-base font-semibold">Local testing notes</h2>
-        <ol className="mt-3 list-decimal space-y-1 pl-5">
-          <li>
-            The Download button points at{" "}
-            <code className="rounded bg-white/70 px-1.5 py-0.5">
-              github.com/OWNER/REPO/releases/latest/download/FocusPad.dmg
-            </code>
-            . Replace <code>OWNER/REPO</code> in <code>apps/web/src/app/page.tsx</code> with your repo.
-          </li>
-          <li>
-            Until your first release exists, the link will 404. Build the DMG locally with{" "}
-            <code className="rounded bg-white/70 px-1.5 py-0.5">npm run desktop:dist</code> or
-            tag a release to publish through GitHub Actions.
-          </li>
-          <li>
-            The build is unsigned. After installing, right-click the app → Open the first time to
-            bypass Gatekeeper. See the README for the full workaround.
-          </li>
-        </ol>
       </section>
 
       <footer className="mt-24 border-t border-black/5 pt-8 text-center text-xs text-neutral-500">

@@ -1,7 +1,7 @@
 {
   "name": "focuspad-desktop",
   "productName": "FocusPad",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "FocusPad - tiny focus timer + notes",
   "main": "dist-electron/main/main.js",
   "author": {

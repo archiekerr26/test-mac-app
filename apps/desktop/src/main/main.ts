@@ -43,6 +43,49 @@ function createWindow() {
   });
 }
 
+function buildAppMenu() {
+  // Builds the macOS menu bar (the strip with Apple logo / FocusPad / File / ...).
+  // The first submenu on macOS is always the app menu — that's where
+  // "About FocusPad" and "Check for Updates..." belong, matching native apps
+  // like Claude, Slack, etc.
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: app.name,
+      submenu: [
+        { role: "about" },
+        {
+          label: "Check for Updates...",
+          click: () => {
+            if (isDev) {
+              new Notification({
+                title: "FocusPad",
+                body: "Update checks are disabled in development.",
+              }).show();
+              return;
+            }
+            autoUpdater
+              .checkForUpdates()
+              .catch((err) => log.error("checkForUpdates failed", err));
+          },
+        },
+        { type: "separator" },
+        { role: "services" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
+    { role: "fileMenu" },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    { role: "windowMenu" },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createTray() {
   // Empty 16x16 image; replace with a real template icon later.
   const icon = nativeImage.createEmpty();
@@ -140,6 +183,7 @@ ipcMain.handle("notify:show", (_evt, payload: { title: string; body: string }) =
 });
 
 app.whenReady().then(() => {
+  buildAppMenu();
   createWindow();
   createTray();
   wireAutoUpdater();
