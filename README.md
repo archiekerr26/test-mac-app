@@ -206,3 +206,18 @@ After that, the macOS quarantine warning on first launch goes away.
 - **App won't open after install** — see "macOS security warning workaround" above.
 - **CI release didn't publish** — check the Actions log; ensure the tag matches `v*.*.*`. The default `GITHUB_TOKEN` is sufficient for releases in the same repo.
 - **Download link 404** — you haven't published a release yet, or `OWNER/REPO` placeholders weren't replaced.
+
+
+
+Other command for pushing smth
+# bump version (1.0.0 -> 1.0.1)
+npm version patch --workspace apps/desktop
+
+# commit everything
+git add .
+git commit -m "feat: light/dark theme toggle, prominent update button"
+
+
+# tag and push
+git tag v1.0.1
+git push origin main --tags
