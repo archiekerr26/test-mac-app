@@ -1,21 +1,23 @@
 {
-  "name": "focuspad-desktop",
-  "productName": "FocusPad",
-  "version": "1.0.2",
-  "description": "FocusPad - tiny focus timer + notes",
+  "name": "meetcommand-desktop",
+  "productName": "MeetCommand",
+  "version": "1.0.3",
+  "description": "MeetCommand - menu bar command center for Google Meet",
   "main": "dist-electron/main/main.js",
   "author": {
-    "name": "FocusPad",
+    "name": "MeetCommand",
     "email": "noreply@example.com"
   },
   "scripts": {
     "dev:vite": "vite",
     "dev:electron": "tsc -p tsconfig.electron.json && electron .",
     "dev": "node ./scripts/dev.js",
-    "build": "tsc -p tsconfig.electron.json && vite build",
+    "build:native": "mkdir -p resources && swiftc -O native/audio_helper.swift -o resources/audio_helper",
+    "build": "npm run build:native && tsc -p tsconfig.electron.json && vite build",
     "start": "npm run build && electron .",
     "dist": "npm run build && electron-builder --mac --publish=never",
-    "publish": "npm run build && electron-builder --mac --publish=always"
+    "publish": "npm run build && electron-builder --mac --publish=always",
+    "postinstall": "[ \"$(uname)\" = \"Darwin\" ] && npm run build:native || true"
   },
   "dependencies": {
     "electron-updater": "6.3.9",
@@ -34,8 +36,8 @@
     "vite": "5.4.11"
   },
   "build": {
-    "appId": "com.focuspad.app",
-    "productName": "FocusPad",
+    "appId": "com.meetcommand.app",
+    "productName": "MeetCommand",
     "asar": true,
     "directories": {
       "output": "release",
@@ -46,6 +48,16 @@
       "dist/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "resources/audio_helper",
+        "to": "audio_helper"
+      }
+    ],
+    "extendInfo": {
+      "LSUIElement": true,
+      "NSAppleEventsUsageDescription": "MeetCommand uses Apple Events to detect the active app and tab so it can recognise when you are in a Google Meet call."
+    },
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
@@ -62,13 +74,13 @@
           ]
         }
       ],
-      "artifactName": "FocusPad-${version}.${ext}",
+      "artifactName": "MeetCommand-${version}.${ext}",
       "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false
     },
     "dmg": {
-      "artifactName": "FocusPad.dmg"
+      "artifactName": "MeetCommand.dmg"
     },
     "publish": [
       {

@@ -1,8 +1,8 @@
-import type { FocusPadAPI } from "../preload/preload";
+import type { MeetCommandAPI } from "../preload/preload";
 
 declare global {
   interface Window {
-    focuspad: FocusPadAPI;
+    mc: MeetCommandAPI;
   }
 }
 

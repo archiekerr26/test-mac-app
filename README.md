@@ -1,21 +1,56 @@
-# FocusPad
+# MeetCommand
 
-A test monorepo that proves a downloadable Electron Mac app with auto-update works end-to-end.
+A tiny macOS menu bar **audio control surface**. Mute the mic, swap your
+input or output device, push the system volume around — without opening
+System Settings. Pairs with a small Next.js landing page that links to the
+latest GitHub Release DMG.
 
-- `apps/web` — Next.js 15 + Tailwind landing page with a "Download for Mac" button
-- `apps/desktop` — Electron 33 + React 19 + TypeScript desktop app (timer + notes, tray, native notifications, auto-update via GitHub Releases)
-- `.github/workflows/release.yml` — builds the Mac DMG and publishes a GitHub Release on `v*.*.*` tags
+- `apps/web` — Next.js 15 + Tailwind landing page
+- `apps/desktop` — Electron + React + TypeScript menu bar app
+- `apps/desktop/native/audio_helper.swift` — tiny CoreAudio CLI compiled at
+  install time and bundled inside the .app for device switching
+- `.github/workflows/release.yml` — builds the Mac DMG and publishes a GitHub
+  Release on every `v*.*.*` tag push
 
-> Product: **FocusPad** — a tiny menu-bar focus timer with quick notes.
+---
+
+## What you get
+
+- Lives in the **macOS menu bar** — no Dock icon, no window on launch.
+- Click the menu bar entry → small frameless popover panel.
+- Panel shows:
+  - Frontmost app (informational)
+  - **Microphone** card: mute toggle + volume slider + input device picker
+  - **Output** card: mute toggle + volume slider + output device picker
+  - Quick links: Camera Settings, Sound Settings
+  - Autosaved notes
+  - App version + Check for Updates
+- Tray label changes to `🎙×` when mic is muted, `🔇` when output is muted.
+- Auto-updates via GitHub Releases (`electron-updater`).
+
+### How the audio control works
+
+| Concern              | Mechanism                                                |
+| -------------------- | -------------------------------------------------------- |
+| Output volume + mute | `osascript -e "set volume output volume / muted ..."`     |
+| Input volume         | `osascript -e "set volume input volume ..."`              |
+| Input mute           | Volume → 0 (macOS has no system-wide input-mute flag);   |
+|                      | unmute restores the last non-zero level                  |
+| Device enumeration   | `audio_helper list-input` / `list-output` (CoreAudio)    |
+| Device switching     | `audio_helper set-default-input/-output <name>`          |
+
+The Swift helper is compiled in `postinstall` so you get it the first time
+you run `npm install`. CI builds it on `macos-14`. Source: ~120 lines.
 
 ---
 
 ## Prerequisites
 
-- macOS (Apple Silicon — the build targets arm64 by default)
+- macOS (Apple Silicon — the build targets arm64)
+- Xcode Command Line Tools (`xcode-select --install`) — needed to compile
+  the Swift helper
 - Node.js 20+
 - npm 10+
-- A GitHub repo to host releases
 
 ---
 
@@ -25,7 +60,8 @@ A test monorepo that proves a downloadable Electron Mac app with auto-update wor
 npm install
 ```
 
-This installs both workspaces (`apps/web`, `apps/desktop`).
+This compiles `native/audio_helper.swift` → `apps/desktop/resources/audio_helper`
+in a `postinstall` hook (Mac only).
 
 ---
 
@@ -37,14 +73,6 @@ npm run web:dev
 
 Open <http://localhost:3000>.
 
-The Download button currently points at:
-
-```
-https://github.com/OWNER/REPO/releases/latest/download/FocusPad.dmg
-```
-
-Replace `OWNER/REPO` in `apps/web/src/app/page.tsx` with your real repo. The same applies to the publish provider in `apps/desktop/package.json` and `apps/desktop/dev-app-update.yml`.
-
 ---
 
 ## 3. Run the Electron app locally
@@ -53,15 +81,8 @@ Replace `OWNER/REPO` in `apps/web/src/app/page.tsx` with your real repo. The sam
 npm run desktop:dev
 ```
 
-This starts Vite, waits for it, compiles the Electron main process, and launches Electron pointing at `http://localhost:5173`. You'll see:
-
-- A 25:00 timer with Start / Pause / Reset
-- A persistent notes textarea (saved to `localStorage`)
-- App version in the header
-- A tray icon with "Show FocusPad" / "Check for Updates" / "Quit"
-- A native macOS notification when the timer hits 0
-
-> Auto-updates are disabled in dev (electron-updater requires a packaged build). Use the production DMG to test updates.
+No window pops up — look at the **macOS menu bar**. You'll see a small `◯`
+glyph. Click it to open the panel.
 
 ---
 
@@ -71,82 +92,59 @@ This starts Vite, waits for it, compiles the Electron main process, and launches
 npm run desktop:dist
 ```
 
-Output: `apps/desktop/release/FocusPad.dmg` plus the `latest-mac.yml` manifest used by electron-updater.
+Output: `apps/desktop/release/MeetCommand.dmg`. Install: open the DMG, drag
+**MeetCommand** into **Applications**.
 
-Install: open the DMG and drag **FocusPad** into **Applications**.
-
-### macOS security warning workaround (unsigned build)
-
-Because the build is unsigned, macOS will refuse to open it on first launch ("FocusPad can't be opened because Apple cannot check it for malicious software").
-
-Workaround:
-
-1. Open Finder → **Applications**
-2. **Right-click** FocusPad → **Open**
-3. In the dialog, click **Open** (only needed the first time)
-
-If that dialog doesn't appear, use:
+### Unsigned-build workaround
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/FocusPad.app
+xattr -dr com.apple.quarantine /Applications/MeetCommand.app
 ```
 
-This is fine for local testing only. For real distribution, see "Code signing & notarization" below.
+Open MeetCommand from Applications. The "damaged" / "can't verify developer"
+warning goes away.
 
 ---
 
-## 5. Create the first GitHub Release
+## 5. Publish a GitHub Release
 
-The desktop app's auto-updater reads from GitHub Releases. To publish:
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
 
-1. Push this repo to GitHub.
-2. Replace every `OWNER/REPO` placeholder:
-   - `apps/web/src/app/page.tsx`
-   - `apps/desktop/package.json` → `build.publish[0]`
-   - `apps/desktop/dev-app-update.yml`
-3. Commit and push.
-4. Tag and push:
+GitHub Actions (`release.yml`) on `macos-14`:
 
-   ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
+1. `npm ci`
+2. `swiftc` compiles the audio helper (it's part of `npm run build:native`,
+   which runs as part of `npm run publish`)
+3. electron-builder packages the .app, including the helper as
+   `Resources/audio_helper`
+4. Uploads `MeetCommand.dmg`, `MeetCommand-X.Y.Z.zip`, `latest-mac.yml` to
+   the Release
 
-5. GitHub Actions runs `release.yml`:
-   - Installs deps on `macos-14` (arm64)
-   - Builds the renderer, compiles the main process
-   - Runs `electron-builder --mac --publish=always`
-   - Uploads `FocusPad.dmg`, `FocusPad-1.0.0-arm64.zip`, and `latest-mac.yml` to the GitHub Release as a draft
-6. Open the GitHub Releases page, edit the draft, and **Publish**.
-
-Once published, the landing page download link works:
-`https://github.com/OWNER/REPO/releases/latest/download/FocusPad.dmg`
+Once published the landing page download link works:
+`https://github.com/<owner>/<repo>/releases/latest/download/MeetCommand.dmg`
 
 ---
 
 ## 6. Test auto-updates
 
-1. Install the v1.0.0 DMG locally (drag into Applications, right-click → Open).
-2. Bump the version:
+```bash
+npm version patch --workspace apps/desktop
+git add .
+git commit -m "chore: bump"
+git tag v1.0.X
+git push origin main --tags
+```
 
-   ```bash
-   npm version patch --workspace apps/desktop      # 1.0.0 -> 1.0.1
-   git add apps/desktop/package.json package-lock.json
-   git commit -m "chore: bump desktop to v1.0.1"
-   git tag v1.0.1
-   git push origin main --tags
-   ```
+With v1.0.0 still running, click the panel's **Check for updates**. You'll
+see `Checking…` → `Found vX.Y.Z` → `Downloading X%` → green
+**Restart to install vX.Y.Z**.
 
-3. Wait for the GitHub Actions run to finish and publish the new release.
-4. With the **installed** v1.0.0 app open:
-   - The app checks for updates 3 seconds after launch.
-   - You'll see a native "FocusPad update available" notification.
-   - The new build downloads in the background.
-   - When ready, the footer shows **Restart to install v1.0.1**.
-   - Click it → the app quits, swaps in the new version, relaunches.
-5. Confirm the version in the header is now `v1.0.1`.
-
-You can also force a check from the **Check for Updates** button or the tray menu.
+> Unsigned-build limit: install fails the macOS code-signature check. Fix is
+> a real Apple Developer ID + notarization. Detection + download work end to
+> end without that.
 
 ---
 
@@ -155,69 +153,81 @@ You can also force a check from the **Check for Updates** button or the tray men
 ```
 .
 ├── apps
-│   ├── web                  # Next.js 15 landing page
+│   ├── web                    # Next.js 15 landing page
 │   └── desktop
+│       ├── native             # audio_helper.swift (CoreAudio)
+│       ├── resources          # build output (.gitignored)
 │       ├── src
-│       │   ├── main         # Electron main process (window, tray, autoUpdater)
-│       │   ├── preload      # contextBridge API exposed to renderer
-│       │   └── renderer     # React UI (timer + notes)
-│       └── scripts/dev.js   # local dev launcher
+│       │   ├── main           # Electron main: tray, panel, IPC, audio bridge
+│       │   ├── preload        # contextBridge API
+│       │   └── renderer       # React popover UI
+│       └── scripts/dev.js
 ├── .github/workflows/release.yml
-├── package.json             # npm workspaces root
+├── package.json               # npm workspaces root
 └── README.md
 ```
 
 ---
 
+## Known limitations
+
+- **Camera off** isn't togglable from a third-party app on macOS. Each app
+  manages its own camera session. The panel offers a deep link into
+  *System Settings → Privacy → Camera* as a quick jump.
+- **Per-app mic mute** doesn't exist at OS level either. The mic mute here
+  is system-wide (input volume → 0), which is what most apps respect.
+- **Bluetooth output devices** sometimes report stale names if just connected.
+  The panel re-polls every 1.5s, so a refresh is at most that delay.
+
+---
+
+## Future upgrade path
+
+- Per-app volume control via CoreAudio process taps (macOS 14+).
+- Hotkey to toggle mic mute from anywhere.
+- Menu bar mini-controls (volume scroll on the tray icon).
+- Optional output device "favorites" with one-tap switching.
+
+---
+
 ## Code signing & notarization (later)
 
-The current build is unsigned (`identity: null`, `hardenedRuntime: false`). Once you have an Apple Developer ID:
+Same approach as before:
 
 1. In `apps/desktop/package.json` → `build.mac`:
    - Remove `"identity": null`
    - Set `"hardenedRuntime": true`
    - Add `"notarize": true`
 2. Add an `entitlements.mac.plist` and reference it in `build.mac.entitlements`.
-3. In CI, expose:
-   - `CSC_LINK` — base64 of your `.p12` certificate
-   - `CSC_KEY_PASSWORD` — its password
-   - `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` — for notarization
+3. CI secrets: `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`,
+   `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
 4. Remove `CSC_IDENTITY_AUTO_DISCOVERY: false` from the workflow.
 
-After that, the macOS quarantine warning on first launch goes away.
+After that, the macOS quarantine warning goes away and auto-update install
+works end-to-end.
 
 ---
 
 ## Common scripts
 
-| Command                    | What it does                             |
-| -------------------------- | ---------------------------------------- |
-| `npm run web:dev`          | Run the landing page on :3000            |
-| `npm run web:build`        | Build the landing page                   |
-| `npm run desktop:dev`      | Run the Electron app in dev mode         |
-| `npm run desktop:dist`     | Build a local DMG (no upload)            |
-| `npm run desktop:publish`  | Build + upload to GitHub Releases (CI)   |
+| Command                    | What it does                              |
+| -------------------------- | ----------------------------------------- |
+| `npm run web:dev`          | Run the landing page on :3000             |
+| `npm run web:build`        | Build the landing page                    |
+| `npm run desktop:dev`      | Run the menu bar app in dev mode          |
+| `npm run desktop:dist`     | Build a local DMG (no upload)             |
+| `npm run desktop:publish`  | Build + upload to GitHub Releases (CI)    |
 
 ---
 
 ## Troubleshooting
 
-- **`electron-updater` "ENOENT dev-app-update.yml"** — only happens in dev. Update checks are disabled in dev by design. Test against a packaged build.
-- **App won't open after install** — see "macOS security warning workaround" above.
-- **CI release didn't publish** — check the Actions log; ensure the tag matches `v*.*.*`. The default `GITHUB_TOKEN` is sufficient for releases in the same repo.
-- **Download link 404** — you haven't published a release yet, or `OWNER/REPO` placeholders weren't replaced.
-
-
-
-Other command for pushing smth
-# bump version (1.0.0 -> 1.0.1)
-npm version patch --workspace apps/desktop
-
-# commit everything
-git add .
-git commit -m "feat: light/dark theme toggle, prominent update button"
-
-
-# tag and push
-git tag v1.0.1
-git push origin main --tags
+- **`swiftc: command not found`** during `npm install` — install Xcode CLT
+  with `xcode-select --install`.
+- **Device dropdowns are empty** — make sure `apps/desktop/resources/audio_helper`
+  exists. Re-run `npm install` or `npm --workspace apps/desktop run build:native`.
+- **App won't open after install** — see the `xattr` workaround above.
+- **Volume slider snaps back** — known race when polling and dragging
+  collide; release the slider, the next poll syncs.
+- **Bluetooth device disappears momentarily** — macOS sometimes drops it
+  during reconnection; the panel updates within ~2s.

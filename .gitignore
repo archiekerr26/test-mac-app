@@ -11,6 +11,7 @@ build
 apps/desktop/dist
 apps/desktop/dist-electron
 apps/desktop/release
+apps/desktop/resources/audio_helper
 .vercel
 .turbo
 coverage

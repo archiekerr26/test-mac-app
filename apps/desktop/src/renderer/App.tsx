@@ -1,281 +1,422 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { UpdateStatus } from "../preload/preload";
+import type { AudioState, UpdateStatus } from "../preload/preload";
 
-const NOTES_KEY = "focuspad:notes";
-const THEME_KEY = "focuspad:theme";
-const DEFAULT_MINUTES = 25;
-
-type Theme = "light" | "dark";
-
-function formatTime(totalSeconds: number) {
-  const m = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
-  const s = (totalSeconds % 60).toString().padStart(2, "0");
-  return `${m}:${s}`;
-}
+const initial: AudioState = {
+  outputVolume: 0,
+  outputMuted: false,
+  inputVolume: 0,
+  inputMuted: false,
+  inputs: [],
+  outputs: [],
+  defaultInput: "",
+  defaultOutput: "",
+  activeApp: "",
+};
 
 export function App() {
-  const [version, setVersion] = useState<string>("");
-  const [secondsLeft, setSecondsLeft] = useState(DEFAULT_MINUTES * 60);
-  const [running, setRunning] = useState(false);
+  const [version, setVersion] = useState("");
+  const [state, setState] = useState<AudioState>(initial);
   const [notes, setNotes] = useState("");
-  const [theme, setTheme] = useState<Theme>("dark");
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: "idle" });
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Track local slider drag so external polls don't yank the thumb.
+  const [draggingOutput, setDraggingOutput] = useState(false);
+  const [draggingInput, setDraggingInput] = useState(false);
+  const [localOutput, setLocalOutput] = useState(0);
+  const [localInput, setLocalInput] = useState(0);
+  const notesDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    window.focuspad.getVersion().then(setVersion);
-    setNotes(localStorage.getItem(NOTES_KEY) ?? "");
-    const savedTheme = localStorage.getItem(THEME_KEY) as Theme | null;
-    if (savedTheme === "light" || savedTheme === "dark") setTheme(savedTheme);
-    const off = window.focuspad.onUpdateStatus(setUpdateStatus);
-    return off;
+    void window.mc.getVersion().then(setVersion);
+    void window.mc.loadNotes().then((n) => setNotes(n ?? ""));
+    const offState = window.mc.onAudioState(setState);
+    const offUpdate = window.mc.onUpdateStatus(setUpdateStatus);
+    return () => {
+      offState();
+      offUpdate();
+    };
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(NOTES_KEY, notes);
+    if (!draggingOutput) setLocalOutput(state.outputVolume);
+  }, [state.outputVolume, draggingOutput]);
+  useEffect(() => {
+    if (!draggingInput) setLocalInput(state.inputVolume);
+  }, [state.inputVolume, draggingInput]);
+
+  useEffect(() => {
+    if (notesDebounce.current) clearTimeout(notesDebounce.current);
+    notesDebounce.current = setTimeout(() => void window.mc.saveNotes(notes), 400);
   }, [notes]);
-
-  useEffect(() => {
-    localStorage.setItem(THEME_KEY, theme);
-    document.body.style.background = theme === "dark" ? "#0b0b0c" : "#f5f5f7";
-    document.body.style.color = theme === "dark" ? "#f5f5f5" : "#0b0b0c";
-  }, [theme]);
-
-  useEffect(() => {
-    if (!running) return;
-    intervalRef.current = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) {
-          clearInterval(intervalRef.current!);
-          setRunning(false);
-          window.focuspad.showNotification(
-            "Focus session complete",
-            "Nice work. Take a short break."
-          );
-          return 0;
-        }
-        return s - 1;
-      });
-    }, 1000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [running]);
-
-  const reset = () => {
-    setRunning(false);
-    setSecondsLeft(DEFAULT_MINUTES * 60);
-  };
 
   const checkForUpdates = async () => {
     setUpdateStatus({ state: "checking" });
-    const r = await window.focuspad.checkForUpdates();
+    const r = await window.mc.checkForUpdates();
     if (!r.ok) setUpdateStatus({ state: "error", message: r.reason ?? "Unknown error" });
   };
 
-  const t = useMemo(() => themes[theme], [theme]);
+  const outputVolDisplay = draggingOutput ? localOutput : state.outputVolume;
+  const inputVolDisplay = draggingInput ? localInput : state.inputVolume;
 
   return (
-    <div style={{ ...styles.shell, background: t.bg, color: t.fg }}>
-      <header style={styles.header}>
-        <div style={{ ...styles.brand, color: t.fg }}>FocusPad</div>
-        <div style={styles.headerRight}>
-          <button
-            style={{ ...styles.iconBtn, background: t.surface, borderColor: t.border, color: t.fg }}
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-          >
-            {theme === "dark" ? "Light" : "Dark"}
-          </button>
-          <div style={{ ...styles.version, color: t.muted }}>v{version || "…"}</div>
+    <div style={styles.shell}>
+      <div style={styles.header}>
+        <div style={styles.brand}>
+          <span style={styles.brandDot} />
+          MeetCommand
         </div>
-      </header>
+        <button style={styles.iconBtn} onClick={() => window.mc.hidePanel()} title="Hide">
+          ✕
+        </button>
+      </div>
 
-      <section
-        style={{ ...styles.timerWrap, background: t.surface, borderColor: t.border }}
-      >
-        <div style={styles.timer}>{formatTime(secondsLeft)}</div>
-        <div style={styles.row}>
-          <button
-            style={{ ...styles.primaryBtn, background: t.fg, color: t.bg }}
-            onClick={() => setRunning((r) => !r)}
-          >
-            {running ? "Pause" : "Start"}
-          </button>
-          <button
-            style={{ ...styles.ghostBtn, color: t.fg, borderColor: t.border }}
-            onClick={reset}
-          >
-            Reset
-          </button>
+      {state.activeApp && (
+        <div style={styles.activeApp} title={state.activeApp}>
+          Frontmost: <strong style={{ color: "#e5e7eb" }}>{state.activeApp}</strong>
         </div>
-      </section>
+      )}
 
-      <section style={styles.notesWrap}>
-        <label style={{ ...styles.label, color: t.muted }}>Notes</label>
+      <DeviceCard
+        label="Microphone"
+        icon="🎙"
+        muted={state.inputMuted}
+        muteLabel={state.inputMuted ? "Muted" : "Live"}
+        onToggleMute={() => window.mc.toggleInputMute()}
+        volume={inputVolDisplay}
+        onVolumeChange={(v) => {
+          setLocalInput(v);
+          setDraggingInput(true);
+        }}
+        onVolumeCommit={(v) => {
+          setDraggingInput(false);
+          void window.mc.setInputVolume(v);
+        }}
+        currentDevice={state.defaultInput}
+        devices={state.inputs}
+        onDeviceChange={(name) => void window.mc.setDefaultInput(name)}
+      />
+
+      <DeviceCard
+        label="Output"
+        icon="🔊"
+        muted={state.outputMuted}
+        muteLabel={state.outputMuted ? "Muted" : "On"}
+        onToggleMute={() => window.mc.toggleOutputMute()}
+        volume={outputVolDisplay}
+        onVolumeChange={(v) => {
+          setLocalOutput(v);
+          setDraggingOutput(true);
+        }}
+        onVolumeCommit={(v) => {
+          setDraggingOutput(false);
+          void window.mc.setOutputVolume(v);
+        }}
+        currentDevice={state.defaultOutput}
+        devices={state.outputs}
+        onDeviceChange={(name) => void window.mc.setDefaultOutput(name)}
+      />
+
+      <div style={styles.actionsRow}>
+        <button style={styles.action} onClick={() => window.mc.openCameraSettings()}>
+          Camera settings
+        </button>
+        <button style={styles.action} onClick={() => window.mc.openSoundSettings()}>
+          Sound settings
+        </button>
+      </div>
+
+      <div style={styles.notesWrap}>
+        <label style={styles.notesLabel}>Notes</label>
         <textarea
-          style={{ ...styles.notes, background: t.surface, borderColor: t.border, color: t.fg }}
+          style={styles.notes}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Jot something down..."
+          placeholder="Quick notes, autosaved..."
         />
-      </section>
+      </div>
 
       <footer style={styles.footer}>
-        <button
-          style={{
-            ...styles.updateBtn,
-            background: t.surface,
-            borderColor: t.border,
-            color: t.fg,
-          }}
-          onClick={checkForUpdates}
-        >
-          Check for Updates
-        </button>
-        <UpdateBadge status={updateStatus} t={t} />
+        <span style={styles.version}>v{version || "…"}</span>
+        <UpdateBadge status={updateStatus} onCheck={checkForUpdates} />
       </footer>
     </div>
   );
 }
 
-function UpdateBadge({ status, t }: { status: UpdateStatus; t: ThemeTokens }) {
-  const base: React.CSSProperties = {
-    fontSize: 11,
-    color: t.muted,
-    background: t.surface,
-    border: `1px solid ${t.border}`,
-    padding: "4px 8px",
-    borderRadius: 6,
-  };
-  if (status.state === "idle") return null;
-  if (status.state === "checking") return <span style={base}>Checking…</span>;
-  if (status.state === "none") return <span style={base}>Up to date</span>;
-  if (status.state === "available") return <span style={base}>Found v{status.version}</span>;
-  if (status.state === "downloading")
-    return <span style={base}>Downloading {status.percent}%</span>;
-  if (status.state === "downloaded")
-    return (
-      <button
-        style={{ ...base, cursor: "pointer", border: "1px solid #4ade80", color: "#4ade80" }}
-        onClick={() => window.focuspad.installNow()}
+function DeviceCard({
+  label,
+  icon,
+  muted,
+  muteLabel,
+  onToggleMute,
+  volume,
+  onVolumeChange,
+  onVolumeCommit,
+  currentDevice,
+  devices,
+  onDeviceChange,
+}: {
+  label: string;
+  icon: string;
+  muted: boolean;
+  muteLabel: string;
+  onToggleMute: () => void;
+  volume: number;
+  onVolumeChange: (v: number) => void;
+  onVolumeCommit: (v: number) => void;
+  currentDevice: string;
+  devices: { id: string; name: string }[];
+  onDeviceChange: (name: string) => void;
+}) {
+  return (
+    <div style={styles.deviceCard}>
+      <div style={styles.deviceHeader}>
+        <span style={styles.deviceTitle}>
+          <span style={styles.deviceIcon}>{icon}</span>
+          {label}
+        </span>
+        <button
+          onClick={onToggleMute}
+          style={{
+            ...styles.muteBtn,
+            ...(muted ? styles.muteBtnActive : {}),
+          }}
+        >
+          {muteLabel}
+        </button>
+      </div>
+
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={volume}
+        onChange={(e) => onVolumeChange(parseInt(e.target.value, 10))}
+        onMouseUp={(e) => onVolumeCommit(parseInt((e.target as HTMLInputElement).value, 10))}
+        onTouchEnd={(e) =>
+          onVolumeCommit(parseInt((e.target as HTMLInputElement).value, 10))
+        }
+        style={styles.slider}
+      />
+
+      <select
+        value={currentDevice}
+        onChange={(e) => onDeviceChange(e.target.value)}
+        style={styles.select}
       >
-        Restart to install v{status.version}
-      </button>
-    );
-  if (status.state === "error")
-    return <span style={{ ...base, color: "#f87171" }}>Error: {status.message}</span>;
-  return null;
+        {devices.length === 0 && <option value="">No devices found</option>}
+        {!devices.some((d) => d.name === currentDevice) && currentDevice && (
+          <option value={currentDevice}>{currentDevice}</option>
+        )}
+        {devices.map((d) => (
+          <option key={d.id} value={d.name}>
+            {d.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 }
 
-type ThemeTokens = {
-  bg: string;
-  fg: string;
-  muted: string;
-  surface: string;
-  border: string;
-};
+function UpdateBadge({
+  status,
+  onCheck,
+}: {
+  status: UpdateStatus;
+  onCheck: () => void;
+}) {
+  const text = useMemo(() => {
+    switch (status.state) {
+      case "checking":
+        return "Checking…";
+      case "none":
+        return "Up to date";
+      case "available":
+        return `Found v${status.version}`;
+      case "downloading":
+        return `Downloading ${status.percent}%`;
+      case "downloaded":
+        return `Restart to install v${status.version}`;
+      case "error":
+        return `Error: ${status.message}`;
+      default:
+        return "Check for updates";
+    }
+  }, [status]);
 
-const themes: Record<Theme, ThemeTokens> = {
-  dark: {
-    bg: "#0b0b0c",
-    fg: "#f5f5f5",
-    muted: "#9ca3af",
-    surface: "#141416",
-    border: "#1f1f23",
-  },
-  light: {
-    bg: "#f5f5f7",
-    fg: "#0b0b0c",
-    muted: "#6b7280",
-    surface: "#ffffff",
-    border: "#e5e5ea",
-  },
-};
+  if (status.state === "downloaded") {
+    return (
+      <button
+        style={{ ...styles.updateBtn, color: "#4ade80", borderColor: "#4ade80" }}
+        onClick={() => void window.mc.installNow()}
+      >
+        {text}
+      </button>
+    );
+  }
+  return (
+    <button
+      style={{
+        ...styles.updateBtn,
+        color: status.state === "error" ? "#f87171" : "#9ca3af",
+      }}
+      onClick={onCheck}
+    >
+      {text}
+    </button>
+  );
+}
 
 const styles: Record<string, React.CSSProperties> = {
   shell: {
     display: "flex",
     flexDirection: "column",
+    gap: 10,
     height: "100vh",
-    padding: "16px 18px 12px",
+    padding: "14px 14px 12px",
     boxSizing: "border-box",
-    WebkitAppRegion: "drag",
-    transition: "background 200ms ease, color 200ms ease",
+    background: "rgba(20, 20, 22, 0.88)",
+    backdropFilter: "blur(24px) saturate(160%)",
+    WebkitBackdropFilter: "blur(24px) saturate(160%)",
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.08)",
+    color: "#f5f5f5",
+    overflow: "hidden",
   } as React.CSSProperties,
   header: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: 24,
+    WebkitAppRegion: "drag",
+  } as React.CSSProperties,
+  brand: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontWeight: 600,
+    fontSize: 13,
+    letterSpacing: 0.2,
   },
-  headerRight: { display: "flex", alignItems: "center", gap: 8 },
-  brand: { fontWeight: 600, fontSize: 14, letterSpacing: 0.3 },
-  version: { fontSize: 11 },
+  brandDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    background: "linear-gradient(135deg,#22d3ee,#6366f1)",
+  },
   iconBtn: {
-    border: "1px solid",
-    padding: "4px 10px",
+    background: "transparent",
+    color: "#9ca3af",
+    border: "none",
+    cursor: "pointer",
+    fontSize: 12,
+    padding: 4,
+    WebkitAppRegion: "no-drag",
+  } as React.CSSProperties,
+  activeApp: {
+    fontSize: 11,
+    color: "#9ca3af",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  deviceCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.06)",
+    borderRadius: 10,
+    padding: 10,
+  },
+  deviceHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  deviceTitle: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 12,
+    fontWeight: 500,
+  },
+  deviceIcon: { fontSize: 13 },
+  muteBtn: {
+    background: "transparent",
+    color: "#d1d5db",
+    border: "1px solid rgba(255,255,255,0.12)",
+    padding: "3px 10px",
     borderRadius: 6,
     fontSize: 11,
     cursor: "pointer",
     WebkitAppRegion: "no-drag",
   } as React.CSSProperties,
-  timerWrap: {
-    marginTop: 18,
-    border: "1px solid",
-    borderRadius: 16,
-    padding: 22,
-    textAlign: "center",
-  },
-  timer: { fontSize: 56, fontWeight: 200, fontVariantNumeric: "tabular-nums", letterSpacing: -1 },
-  row: { display: "flex", gap: 8, justifyContent: "center", marginTop: 14 },
-  primaryBtn: {
-    border: "none",
-    padding: "9px 20px",
-    borderRadius: 10,
+  muteBtnActive: {
+    background: "#f87171",
+    color: "#0b0b0c",
+    borderColor: "#f87171",
     fontWeight: 600,
-    cursor: "pointer",
+  },
+  slider: {
+    width: "100%",
+    accentColor: "#fff",
     WebkitAppRegion: "no-drag",
   } as React.CSSProperties,
-  ghostBtn: {
-    background: "transparent",
-    border: "1px solid",
-    padding: "9px 16px",
-    borderRadius: 10,
-    cursor: "pointer",
-    WebkitAppRegion: "no-drag",
-  } as React.CSSProperties,
-  notesWrap: { marginTop: 16, flex: 1, display: "flex", flexDirection: "column" },
-  label: {
+  select: {
+    width: "100%",
+    background: "rgba(0,0,0,0.3)",
+    color: "#f5f5f5",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 6,
+    padding: "5px 6px",
     fontSize: 11,
-    marginBottom: 6,
+    WebkitAppRegion: "no-drag",
+  } as React.CSSProperties,
+  actionsRow: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 },
+  action: {
+    background: "rgba(255,255,255,0.06)",
+    color: "#f5f5f5",
+    border: "1px solid rgba(255,255,255,0.08)",
+    padding: "7px 10px",
+    borderRadius: 8,
+    fontSize: 12,
+    cursor: "pointer",
+    WebkitAppRegion: "no-drag",
+  } as React.CSSProperties,
+  notesWrap: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 },
+  notesLabel: {
+    fontSize: 10,
     textTransform: "uppercase",
     letterSpacing: 0.6,
+    color: "#9ca3af",
+    marginBottom: 4,
   },
   notes: {
     flex: 1,
-    border: "1px solid",
-    borderRadius: 12,
-    padding: 12,
+    background: "rgba(0,0,0,0.3)",
+    border: "1px solid rgba(255,255,255,0.06)",
+    borderRadius: 8,
+    color: "#f5f5f5",
+    padding: 8,
     resize: "none",
-    fontSize: 13,
+    fontSize: 12,
     lineHeight: 1.5,
     fontFamily: "inherit",
     outline: "none",
     WebkitAppRegion: "no-drag",
   } as React.CSSProperties,
   footer: {
-    marginTop: 12,
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 8,
+    paddingTop: 4,
   },
+  version: { fontSize: 11, color: "#6b7280" },
   updateBtn: {
-    border: "1px solid",
-    padding: "6px 12px",
-    borderRadius: 8,
-    fontSize: 12,
+    background: "transparent",
+    border: "1px solid rgba(255,255,255,0.12)",
+    padding: "4px 8px",
+    borderRadius: 6,
+    fontSize: 11,
     cursor: "pointer",
     WebkitAppRegion: "no-drag",
   } as React.CSSProperties,
