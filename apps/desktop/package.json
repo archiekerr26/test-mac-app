@@ -54,30 +54,21 @@
         "to": "audio_helper"
       }
     ],
-    "extendInfo": {
-      "LSUIElement": true,
-      "NSAppleEventsUsageDescription": "MeetCommand uses Apple Events to detect the active app and tab so it can recognise when you are in a Google Meet call."
-    },
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "arm64"
-          ]
-        }
+        { "target": "dmg", "arch": ["arm64"] },
+        { "target": "zip", "arch": ["arm64"] }
       ],
       "artifactName": "MeetCommand-${version}.${ext}",
       "identity": null,
       "hardenedRuntime": false,
-      "gatekeeperAssess": false
+      "gatekeeperAssess": false,
+      "extendInfo": {
+        "LSUIElement": true,
+        "NSAppleEventsUsageDescription": "MeetCommand uses Apple Events to read which app is frontmost and to control system audio volume.",
+        "NSMicrophoneUsageDescription": "MeetCommand reads the system microphone level to display and toggle mute."
+      }
     },
     "dmg": {
       "artifactName": "MeetCommand.dmg"
