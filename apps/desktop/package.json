@@ -1,0 +1,72 @@
+{
+  "name": "focuspad-desktop",
+  "productName": "FocusPad",
+  "version": "1.0.0",
+  "description": "FocusPad - tiny focus timer + notes",
+  "main": "dist-electron/main/main.js",
+  "author": {
+    "name": "FocusPad",
+    "email": "noreply@example.com"
+  },
+  "scripts": {
+    "dev:vite": "vite",
+    "dev:electron": "tsc -p tsconfig.electron.json && electron .",
+    "dev": "node ./scripts/dev.js",
+    "build": "tsc -p tsconfig.electron.json && vite build",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --mac --publish=never",
+    "publish": "npm run build && electron-builder --mac --publish=always"
+  },
+  "dependencies": {
+    "electron-updater": "6.3.9",
+    "electron-log": "5.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.9.0",
+    "@types/react": "19.0.0",
+    "@types/react-dom": "19.0.0",
+    "@vitejs/plugin-react": "4.3.4",
+    "electron": "33.2.0",
+    "electron-builder": "25.1.8",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "typescript": "5.6.3",
+    "vite": "5.4.11"
+  },
+  "build": {
+    "appId": "com.focuspad.app",
+    "productName": "FocusPad",
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        { "target": "dmg", "arch": ["arm64"] },
+        { "target": "zip", "arch": ["arm64"] }
+      ],
+      "artifactName": "FocusPad-${version}.${ext}",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "artifactName": "FocusPad.dmg"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "archiekerr26",
+        "repo": "test-mac-app",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

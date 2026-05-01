@@ -1,0 +1,17 @@
+{
+  "name": "focuspad",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "web:dev": "npm --workspace apps/web run dev",
+    "web:build": "npm --workspace apps/web run build",
+    "web:start": "npm --workspace apps/web run start",
+    "desktop:dev": "npm --workspace apps/desktop run dev",
+    "desktop:build": "npm --workspace apps/desktop run build",
+    "desktop:dist": "npm --workspace apps/desktop run dist",
+    "desktop:publish": "npm --workspace apps/desktop run publish"
+  }
+}

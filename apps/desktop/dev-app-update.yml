@@ -1,0 +1,4 @@
+# Used by electron-updater when running in development.
+provider: github
+owner: archiekerr26
+repo: test-mac-app
