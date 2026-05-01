@@ -31,7 +31,7 @@ export default function Page() {
           v1.0.0 · macOS
         </div>
         <h1 className="mt-6 text-5xl font-semibold tracking-tight md:text-7xl">
-          A luh calm tiny focus timer
+          A tiny focus timer
           <br />
           <span className="text-neutral-500">that lives in your menu bar.</span>
         </h1>
